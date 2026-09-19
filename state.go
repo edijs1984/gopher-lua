@@ -1838,9 +1838,18 @@ func (ls *LState) GetHookLocal(dbg *Debug, no int) (string, LValue) {
 	if frame == nil || frame.Fn.IsG {
 		return "", LNil
 	}
-	if name, ok := frame.Fn.LocalName(no, frame.Pc); ok {
-		return name, ls.reg.Get(frame.LocalBase + no - 1)
+
+	regno := no
+	pc := frame.Pc
+	for _, local := range frame.Fn.Proto.DbgLocals {
+		if local.StartPc <= pc && pc < local.EndPc {
+			regno--
+			if regno == 0 {
+				return local.Name, ls.reg.Get(frame.LocalBase + no - 1)
+			}
+		}
 	}
+
 	return "", LNil
 }
 
