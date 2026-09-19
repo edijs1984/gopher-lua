@@ -1825,6 +1825,25 @@ func (ls *LState) GetLocal(dbg *Debug, no int) (string, LValue) {
 	return "", LNil
 }
 
+// GetHookLocal resolves locals at a host line-hook suspension point.
+//
+// Host hooks run before the instruction for the reported source line executes.
+// The regular GetLocal path intentionally uses frame.Pc-1 to match Lua's
+// ordinary debug API semantics. At a pre-instruction hook that makes locals
+// created by the previous source line appear one instruction too early/out of
+// scope. This accessor uses the current frame PC instead and is intended only
+// for host debuggers suspended inside LineHook.
+func (ls *LState) GetHookLocal(dbg *Debug, no int) (string, LValue) {
+	frame := dbg.frame
+	if frame == nil || frame.Fn.IsG {
+		return "", LNil
+	}
+	if name, ok := frame.Fn.LocalName(no, frame.Pc); ok {
+		return name, ls.reg.Get(frame.LocalBase + no - 1)
+	}
+	return "", LNil
+}
+
 func (ls *LState) SetLocal(dbg *Debug, no int, lv LValue) string {
 	frame := dbg.frame
 	if name := ls.findLocal(frame, no); len(name) > 0 {
