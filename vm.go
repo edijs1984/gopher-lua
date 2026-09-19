@@ -10,6 +10,35 @@ import (
 	"strings"
 )
 
+func dispatchLineHook(L *LState, cf *callFrame) {
+	if L.lineHook == nil || cf == nil || cf.Fn == nil || cf.Fn.IsG || cf.Pc <= 0 {
+		return
+	}
+	proto := cf.Fn.Proto
+	pc := cf.Pc - 1
+	if proto == nil || pc < 0 || pc >= len(proto.DbgSourcePositions) {
+		return
+	}
+	line := proto.DbgSourcePositions[pc]
+	if line <= 0 {
+		return
+	}
+	if L.hookLastFrame == cf && L.hookLastLine == line {
+		return
+	}
+
+	depth := 0
+	for parent := cf.Parent; parent != nil; parent = parent.Parent {
+		if parent.Fn != nil && !parent.Fn.IsG {
+			depth++
+		}
+	}
+
+	L.hookLastFrame = cf
+	L.hookLastLine = line
+	L.lineHook(L, HookEvent{Line: line, Depth: depth})
+}
+
 func mainLoop(L *LState, baseframe *callFrame) {
 	var inst uint32
 	var cf *callFrame
@@ -28,6 +57,7 @@ func mainLoop(L *LState, baseframe *callFrame) {
 		cf = L.currentFrame
 		inst = cf.Fn.Proto.Code[cf.Pc]
 		cf.Pc++
+		dispatchLineHook(L, cf)
 		if jumpTable[int(inst>>26)](L, inst, baseframe) == 1 {
 			return
 		}
@@ -57,6 +87,7 @@ func mainLoopWithContext(L *LState, baseframe *callFrame) {
 			L.RaiseError(L.ctx.Err().Error())
 			return
 		default:
+			dispatchLineHook(L, cf)
 			if jumpTable[int(inst>>26)](L, inst, baseframe) == 1 {
 				return
 			}
