@@ -1840,7 +1840,7 @@ func (ls *LState) GetHookLocal(dbg *Debug, no int) (string, LValue) {
 	}
 
 	regno := no
-	pc := frame.Pc
+	pc := frame.Pc - 1
 	for _, local := range frame.Fn.Proto.DbgLocals {
 		if local.StartPc <= pc && pc < local.EndPc {
 			regno--
