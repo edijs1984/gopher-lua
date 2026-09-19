@@ -176,6 +176,19 @@ type Global struct {
 	gccount    int32
 }
 
+// HookEvent describes a Lua source-line transition observed by a host line hook.
+// Depth is zero-based: the top-level chunk is depth 0 and nested Lua calls
+// increment it. Go function frames are not counted.
+type HookEvent struct {
+	Line  int
+	Depth int
+}
+
+// LineHook is a host-only callback invoked before execution crosses into a new
+// Lua source line or Lua frame. The hook runs synchronously on the VM goroutine,
+// so callers may use it as a debugger suspension point.
+type LineHook func(*LState, HookEvent)
+
 type LState struct {
 	G       *Global
 	Parent  *LState
@@ -184,21 +197,33 @@ type LState struct {
 	Dead    bool
 	Options Options
 
-	stop         int32
-	reg          *registry
-	stack        callFrameStack
-	alloc        *allocator
-	currentFrame *callFrame
-	wrapped      bool
-	uvcache      *Upvalue
-	hasErrorFunc bool
-	mainLoop     func(*LState, *callFrame)
-	ctx          context.Context
-	ctxCancelFn  context.CancelFunc
+	stop          int32
+	reg           *registry
+	stack         callFrameStack
+	alloc         *allocator
+	currentFrame  *callFrame
+	wrapped       bool
+	uvcache       *Upvalue
+	hasErrorFunc  bool
+	mainLoop      func(*LState, *callFrame)
+	ctx           context.Context
+	ctxCancelFn   context.CancelFunc
+	lineHook      LineHook
+	hookLastLine  int
+	hookLastFrame *callFrame
 }
 
 func (ls *LState) String() string   { return fmt.Sprintf("thread: %p", ls) }
 func (ls *LState) Type() LValueType { return LTThread }
+
+// SetLineHook installs or clears a host-only Lua source-line hook.
+// Installing a new hook resets transition tracking so the next Lua instruction
+// emits an event.
+func (ls *LState) SetLineHook(hook LineHook) {
+	ls.lineHook = hook
+	ls.hookLastLine = 0
+	ls.hookLastFrame = nil
+}
 
 type LUserData struct {
 	Value     interface{}
